@@ -11,7 +11,7 @@ const transporter = nodemailer.createTransport({
 
 async function enviarCorreo({ to, subject, html }) {
   const mailOptions = {
-    from: process.env.EMAIL_USER,
+    from: `"SweepsTouch Team" <${process.env.EMAIL_USER}>`,
     to,
     subject,
     html,

@@ -120,19 +120,23 @@ slotSchema.statics.obtenerCuposDisponibles = async function (
 // Método: Generar enlace Meet
 slotSchema.methods.generarEnlaceMeet = async function () {
   if (this.enlaceMeet) return this.enlaceMeet;
-  
-  const { OAuth2Client } = require("google-auth-library");
+
+  const { OAuth2Client } = require('google-auth-library');
   const GoogleCredentials = require('./GoogleCredentials');
-  
+
   // Obtener credenciales almacenadas en la base de datos
   const storedCredentials = await GoogleCredentials.getSystemCredentials();
-  
+
   if (!storedCredentials) {
-    throw new Error('No hay credenciales de Google configuradas. Por favor, configura la autenticación de Google desde el panel de administración.');
+    throw new Error(
+      'No hay credenciales de Google configuradas. Por favor, configura la autenticación de Google desde el panel de administración.'
+    );
   }
-  
+
   if (storedCredentials.isExpired()) {
-    console.warn('⚠️ Las credenciales de Google han expirado. Se intentará refrescar automáticamente.');
+    console.warn(
+      '⚠️ Las credenciales de Google han expirado. Se intentará refrescar automáticamente.'
+    );
   }
 
   const oAuth2Client = new OAuth2Client(
@@ -146,44 +150,68 @@ slotSchema.methods.generarEnlaceMeet = async function () {
     access_token: storedCredentials.access_token,
     refresh_token: storedCredentials.refresh_token,
     token_type: storedCredentials.token_type,
-    expiry_date: storedCredentials.expiry_date
+    expiry_date: storedCredentials.expiry_date,
   });
 
   try {
     // Intentar refrescar el token si es necesario
     if (storedCredentials.isExpired()) {
       const { credentials } = await oAuth2Client.refreshAccessToken();
-      
+
       // Actualizar las credenciales en la base de datos
       await GoogleCredentials.updateSystemCredentials({
         access_token: credentials.access_token,
-        refresh_token: credentials.refresh_token || storedCredentials.refresh_token,
+        refresh_token:
+          credentials.refresh_token || storedCredentials.refresh_token,
         token_type: credentials.token_type || storedCredentials.token_type,
         scope: storedCredentials.scope,
-        expiry_date: credentials.expiry_date
+        expiry_date: credentials.expiry_date,
       });
-      
+
       console.log('✅ Token de acceso refrescado automáticamente');
     }
-    
+
     // Marcar las credenciales como usadas
     await storedCredentials.markAsUsed();
-    
   } catch (refreshError) {
     console.error('❌ Error al refrescar token:', refreshError);
-    throw new Error('Error al refrescar el token de acceso. Las credenciales pueden haber sido revocadas. Por favor, vuelve a autenticarte desde el panel de administración.');
+    throw new Error(
+      'Error al refrescar el token de acceso. Las credenciales pueden haber sido revocadas. Por favor, vuelve a autenticarte desde el panel de administración.'
+    );
   }
 
   const auth = oAuth2Client;
   const calendar = google.calendar({ version: 'v3', auth });
 
+  // Obtener la configuración activa para determinar la duración
+  let duration = 60; // Duración por defecto en minutos
+  try {
+    const ScheduleConfig = require('./ScheduleConfig');
+    const config = await ScheduleConfig.findById(this.configId);
+    if (config) {
+      // Buscar la franja horaria correspondiente en la configuración
+      const timeSlot = config.timeSlots.find(
+        (slot) =>
+          slot.startTime === this.horaInicio && slot.endTime === this.horaFin
+      );
+      if (timeSlot) {
+        duration = timeSlot.duration;
+      }
+    }
+  } catch (configError) {
+    console.warn(
+      '⚠️ No se pudo obtener la configuración, usando duración por defecto:',
+      configError.message
+    );
+  }
+
   const startDateTime = new Date(this.fecha);
   const [hours, minutes] = this.horaInicio.split(':');
   startDateTime.setHours(+hours, +minutes, 0, 0);
 
-  const endDateTime = new Date(this.fecha);
-  const [endHours, endMinutes] = this.horaFin.split(':');
-  endDateTime.setHours(+endHours, +endMinutes, 0, 0);
+  // Calcular la hora de fin basada en la duración configurada
+  const endDateTime = new Date(startDateTime);
+  endDateTime.setMinutes(endDateTime.getMinutes() + duration);
 
   const User = require('./User');
   const usuarios = await User.find({
@@ -192,7 +220,7 @@ slotSchema.methods.generarEnlaceMeet = async function () {
 
   const event = {
     summary: `Reunión Promotoras - ${this.horaInicio}`,
-    description: `Reunión del programa de promotoras. Capacidad: ${this.capacidadMaxima} personas.`,
+    description: `Reunión del programa de promotoras. Duración: ${duration} minutos. Capacidad: ${this.capacidadMaxima} personas.`,
     start: {
       dateTime: startDateTime.toISOString(),
       timeZone: 'America/Mexico_City',
@@ -341,20 +369,99 @@ slotSchema.methods.enviarCorreosConfirmacion = async function () {
     if (!user || !user.email) continue;
 
     const correoHtml = `
-      <p>Hola ${user.nombre},</p>
-      <p>Tu registro para el evento ha sido confirmado.</p>
-      <p><strong>Fecha:</strong> ${slot.fecha.toLocaleDateString()}</p>
-      <p><strong>Hora:</strong> ${slot.horaInicio} - ${slot.horaFin}</p>
-      <p><strong>Enlace Meet:</strong> ${
-        slot.enlaceMeet || 'Será enviado próximamente.'
-      }</p>
-      <p>Gracias por participar en el programa de promotoras.</p>
-    `;
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Appointment Confirmed</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #ffffff;
+        color: #333333;
+        margin: 0;
+        padding: 0;
+      }
+      .container {
+        max-width: 480px;
+        margin: auto;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #f0f0f0;
+      }
+      .header {
+        background-color: #ff007f;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        color: white;
+      }
+      .header img {
+        max-height: 40px;
+      }
+      .brand-name {
+        font-family: 'Arial Black', Arial, sans-serif;
+        font-size: 20px;
+        color: white;
+      }
+      .content {
+        padding: 24px;
+        background-color: #ffffff;
+      }
+      .content p {
+        line-height: 1.6;
+        margin: 16px 0;
+      }
+      .highlight {
+        color: #ff007f;
+        font-weight: bold;
+      }
+      .footer {
+        text-align: center;
+        background-color: #ffffff;
+        padding: 16px;
+        font-size: 14px;
+        color: #666;
+      }
+      .emoji {
+        font-size: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <img src="https://jobs.sweepstouch.com/logo-sweepstouch.png" alt="Sweepstouch Logo" />
+        <span class="brand-name">Sweepstouch</span>
+      </div>
+      <div class="content">
+        <p>Hi <strong>${user.nombre}</strong>,</p>
+
+        <p>Your appointment for the <span class="highlight">Brand Promoter Program</span> has been <strong>successfully scheduled</strong> ✅.</p>
+
+        <p>You will receive a Google Meet link before your session begins.</p>
+
+        <p><strong>Date:</strong> ${slot.fecha.toLocaleDateString()}<br>
+        <strong>Time:</strong> ${slot.horaInicio} - ${slot.horaFin}</p>
+
+        <p>If you have any questions before your appointment, just reply to this email.</p>
+
+        <p>We look forward to seeing you soon! <span class="emoji">🎉</span></p>
+      </div>
+      <div class="footer">
+        <p>Powered by Sweepstouch</p>
+      </div>
+    </div>
+  </body>
+  </html>
+`;
 
     try {
       await enviarCorreo({
         to: user.email,
-        subject: 'Confirmación de Registro - Programa Promotoras',
+        subject: '✅ Confirmed: Your Brand Promoter Session',
         html: correoHtml,
       });
     } catch (err) {

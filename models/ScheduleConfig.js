@@ -35,7 +35,7 @@ const scheduleConfigSchema = new mongoose.Schema({
     duration: {
       type: Number,
       required: true,
-      default: 30 // duración en minutos
+      default: 60 // duración en minutos, cambiado a 60
     },
     capacity: {
       type: Number,
@@ -148,4 +148,6 @@ scheduleConfigSchema.statics.createDefaultConfig = async function() {
 };
 
 module.exports = mongoose.model("ScheduleConfig", scheduleConfigSchema);
+
+
 

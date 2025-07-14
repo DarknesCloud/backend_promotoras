@@ -26,6 +26,7 @@ app.use("/api/slots", require("./routes/slots"));
 app.use("/api/attendance", require("./routes/attendance"));
 app.use("/api/approval", require("./routes/approval"));
 app.use("/api/initialize-slots", require("./routes/initialize"));
+app.use("/api/admin", require("./routes/admin"));
 
 // Nueva ruta para CRUD de citas
 app.use("/api/appointments", require("./routes/appointments"));

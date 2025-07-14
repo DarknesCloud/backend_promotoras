@@ -35,9 +35,18 @@ router.get("/active", async (req, res) => {
       config = await ScheduleConfig.createDefaultConfig();
     }
     
+    // Validar que la configuración esté dentro de fechas válidas
+    const now = new Date();
+    if (config.endDate < now) {
+      console.log('Configuración activa ha expirado, extendiendo fechas');
+      config.endDate = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 días más
+      await config.save();
+    }
+    
     res.json({
       success: true,
-      data: config
+      data: config,
+      message: 'Configuración activa obtenida exitosamente'
     });
   } catch (err) {
     console.error('Error obteniendo configuración activa:', err.message);
