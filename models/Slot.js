@@ -283,8 +283,9 @@ slotSchema.methods.registrarUsuario = async function (userId) {
       this.estado = 'lleno';
       try {
         await this.generarEnlaceMeet();
+        await this.enviarCorreosConfirmacion(); // Send email when slot is full
       } catch (e) {
-        console.error('Error generando Meet:', e);
+        console.error('Error generando Meet o enviando correos al llenar cupo:', e);
       }
     }
 
@@ -442,6 +443,8 @@ slotSchema.methods.enviarCorreosConfirmacion = async function () {
         <p>Your appointment for the <span class="highlight">Brand Promoter Program</span> has been <strong>successfully scheduled</strong> ✅.</p>
 
         <p>You will receive a Google Meet link before your session begins.</p>
+
+        ${slot.enlaceMeet ? `<p><strong>Google Meet Link:</strong> <a href="${slot.enlaceMeet}">${slot.enlaceMeet}</a></p>` : ''}
 
         <p><strong>Date:</strong> ${slot.fecha.toLocaleDateString()}<br>
         <strong>Time:</strong> ${slot.horaInicio} - ${slot.horaFin}</p>

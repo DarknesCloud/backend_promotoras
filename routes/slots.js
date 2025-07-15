@@ -301,3 +301,245 @@ router.get("/today", async (req, res) => {
 module.exports = router;
 
 
+
+// POST /api/slots/:id/generate-meet - Generar enlace de Google Meet y enviar correos
+router.post("/:id/generate-meet", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const slot = await Slot.findById(id).populate('usuariosRegistrados.usuario');
+    if (!slot) {
+      return res.status(404).json({
+        success: false,
+        message: "Cupo no encontrado"
+      });
+    }
+
+    // Verificar si el slot tiene usuarios registrados
+    if (slot.usuariosRegistrados.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No hay usuarios registrados en este cupo"
+      });
+    }
+
+    // Generar enlace de Google Meet
+    try {
+      await slot.generarEnlaceMeet();
+      console.log("✅ Enlace de Google Meet generado exitosamente");
+    } catch (meetError) {
+      console.error("❌ Error generando enlace de Meet:", meetError);
+      return res.status(500).json({
+        success: false,
+        message: "Error generando enlace de Google Meet",
+        error: meetError.message
+      });
+    }
+
+    // Enviar correos de confirmación
+    try {
+      await slot.enviarCorreosConfirmacion();
+      console.log("✅ Correos de confirmación enviados exitosamente");
+    } catch (emailError) {
+      console.error("❌ Error enviando correos:", emailError);
+      // No fallar completamente si los emails fallan
+      console.log("⚠️ Enlace de Meet generado pero algunos correos pueden no haberse enviado");
+    }
+
+    // Recargar el slot para obtener los datos actualizados
+    const updatedSlot = await Slot.findById(id).populate('usuariosRegistrados.usuario');
+
+    res.json({
+      success: true,
+      data: updatedSlot,
+      message: "Enlace de Google Meet generado y correos enviados exitosamente"
+    });
+
+  } catch (error) {
+    console.error("❌ Error en generate-meet:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error generando enlace de Meet y enviando correos",
+      error: error.message
+    });
+  }
+});
+
+
+// DELETE /api/slots/:id - Eliminar un slot completo
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const slot = await Slot.findById(id);
+    if (!slot) {
+      return res.status(404).json({
+        success: false,
+        message: "Cupo no encontrado"
+      });
+    }
+
+    // Verificar si el slot tiene usuarios registrados
+    if (slot.usuariosRegistrados.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `No se puede eliminar el cupo porque tiene ${slot.usuariosRegistrados.length} usuario(s) registrado(s)`
+      });
+    }
+
+    await Slot.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: "Cupo eliminado exitosamente"
+    });
+
+  } catch (error) {
+    console.error("❌ Error eliminando cupo:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error eliminando cupo",
+      error: error.message
+    });
+  }
+});
+
+// GET /api/slots/filled - Obtener slots llenos
+router.get("/filled", async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    let query = { estado: "lleno" };
+    
+    if (startDate && endDate) {
+      query.fecha = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+
+    const filledSlots = await Slot.find(query)
+      .populate('usuariosRegistrados.usuario', 'nombre apellido email telefono estado')
+      .sort({ fecha: 1, horaInicio: 1 });
+
+    res.json({
+      success: true,
+      data: filledSlots,
+      message: `${filledSlots.length} cupos llenos encontrados`
+    });
+
+  } catch (error) {
+    console.error("❌ Error obteniendo cupos llenos:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error obteniendo cupos llenos",
+      error: error.message
+    });
+  }
+});
+
+
+
+// PUT /api/slots/:slotId/user/:userId/approve - Aprobar usuario en un slot
+router.put("/:slotId/user/:userId/approve", async (req, res) => {
+  try {
+    const { slotId, userId } = req.params;
+    const { aprobadoPor } = req.body;
+
+    const slot = await Slot.findById(slotId);
+    if (!slot) {
+      return res.status(404).json({
+        success: false,
+        message: "Slot no encontrado"
+      });
+    }
+
+    // Aprobar usuario usando el método del modelo
+    await slot.aprobarUsuario(userId, aprobadoPor || 'Admin');
+
+    // Recargar el slot con los datos actualizados
+    const updatedSlot = await Slot.findById(slotId).populate('usuariosRegistrados.usuario');
+
+    res.json({
+      success: true,
+      data: updatedSlot,
+      message: "Usuario aprobado exitosamente"
+    });
+
+  } catch (error) {
+    console.error("❌ Error aprobando usuario:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error aprobando usuario",
+      error: error.message
+    });
+  }
+});
+
+// GET /api/slots/attendance-lists - Obtener listas de asistencia
+router.get("/attendance-lists", async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    let query = {};
+    
+    if (startDate && endDate) {
+      query.fecha = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+
+    const slots = await Slot.find(query)
+      .populate('usuariosRegistrados.usuario', 'nombre apellido email telefono estado')
+      .sort({ fecha: 1, horaInicio: 1 });
+
+    // Procesar datos para crear listas de asistencia
+    const attendanceLists = {
+      attended: [],
+      absent: [],
+      pending: []
+    };
+
+    slots.forEach(slot => {
+      slot.usuariosRegistrados.forEach(registro => {
+        const user = registro.usuario;
+        const slotInfo = {
+          slotId: slot._id,
+          fecha: slot.fecha,
+          horaInicio: slot.horaInicio,
+          horaFin: slot.horaFin,
+          user: {
+            _id: user._id,
+            nombre: user.nombre,
+            apellido: user.apellido,
+            email: user.email,
+            telefono: user.telefono,
+            estado: user.estado
+          },
+          estadoAprobacion: registro.estadoAprobacion,
+          fechaRegistro: registro.fechaRegistro
+        };
+
+        // Por ahora, todos van a pending ya que no tenemos sistema de asistencia implementado
+        // En el futuro, esto se basará en los datos reales de asistencia
+        attendanceLists.pending.push(slotInfo);
+      });
+    });
+
+    res.json({
+      success: true,
+      data: attendanceLists,
+      message: "Listas de asistencia obtenidas exitosamente"
+    });
+
+  } catch (error) {
+    console.error("❌ Error obteniendo listas de asistencia:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error obteniendo listas de asistencia",
+      error: error.message
+    });
+  }
+});
+
