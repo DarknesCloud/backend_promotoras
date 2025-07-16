@@ -25,6 +25,7 @@ app.use("/api/invitation", require("./routes/invitation"));
 app.use("/api/slots", require("./routes/slots"));
 app.use("/api/attendance", require("./routes/attendance"));
 app.use("/api/approval", require("./routes/approval"));
+app.use("/api/approvedusers", require("./routes/approvedusers"));
 app.use("/api/initialize-slots", require("./routes/initialize"));
 app.use("/api/admin", require("./routes/admin"));
 

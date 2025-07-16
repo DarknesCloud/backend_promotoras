@@ -88,8 +88,12 @@ const userSchema = new mongoose.Schema({
   },
   estado: {
     type: String,
-    enum: ['pendiente', 'agendado', 'reunion_realizada', 'aprobado', 'desaprobado'],
-    default: 'pendiente'
+    enum: ["pendiente", "agendado", "reunion_realizada", "aprobado", "desaprobado"],
+    default: "pendiente"
+  },
+  asistencia: {
+    type: Boolean,
+    default: null
   },
   // Nuevos campos para el flujo de aprobación
   fechaAprobacion: {
