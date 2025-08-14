@@ -405,10 +405,6 @@ router.post('/:id/reject', async (req, res) => {
 
 
 
-    });
-  }
-});
-
 // Obtener un usuario por email
 router.get("/email/:email", async (req, res) => {
   try {
