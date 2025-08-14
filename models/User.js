@@ -117,6 +117,19 @@ const userSchema = new mongoose.Schema({
   fechaCreacion: {
     type: Date,
     default: Date.now
+  },
+  videoWatched: {
+    type: Boolean,
+    default: false
+  },
+  photoUrl: {
+    type: String,
+    default: null
+  },
+  token: {
+    type: String,
+    unique: true,
+    sparse: true // Permite que haya documentos sin token, o con token nulo
   }
 }, {
   timestamps: true

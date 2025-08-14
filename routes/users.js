@@ -39,7 +39,7 @@ const validateUserData = (req, res, next) => {
 // Crear nuevo usuario y registrarlo en un cupo
 router.post('/', validateUserData, async (req, res) => {
   try {
-    const { email, slotId, idiomas, idioma } = req.body;
+    const { email, slotId, idiomas, idioma, videoWatched, photoUrl } = req.body;
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
@@ -51,6 +51,8 @@ router.post('/', validateUserData, async (req, res) => {
 
     const userData = { ...req.body };
     userData.email = email.toLowerCase();
+    userData.videoWatched = videoWatched || false;
+    userData.photoUrl = photoUrl || null;
 
     if (idiomas && Array.isArray(idiomas) && idiomas.length > 0) {
       userData.idiomas = idiomas;
@@ -403,5 +405,220 @@ router.post('/:id/reject', async (req, res) => {
 
 
 
+    });
+  }
+});
+
+// Obtener un usuario por email
+router.get("/email/:email", async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.params.email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
+    }
+    res.json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.error("Error obteniendo usuario por email:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
+  }
+});
+
+// Actualizar photoUrl de un usuario por email
+router.put("/email/:email/photo", async (req, res) => {
+  try {
+    const { photoUrl } = req.body;
+    const user = await User.findOneAndUpdate(
+      { email: req.params.email.toLowerCase() },
+      { photoUrl: photoUrl },
+      { new: true }
+    );
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
+    }
+    res.json({
+      success: true,
+      message: "Photo URL actualizada exitosamente",
+      data: user,
+    });
+  } catch (error) {
+    console.error("Error actualizando photo URL:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
+  }
+});
+
+// Actualizar videoWatched de un usuario por email
+router.put("/email/:email/video", async (req, res) => {
+  try {
+    const { videoWatched } = req.body;
+    const user = await User.findOneAndUpdate(
+      { email: req.params.email.toLowerCase() },
+      { videoWatched: videoWatched },
+      { new: true }
+    );
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
+    }
+    res.json({
+      success: true,
+      message: "Estado de video actualizado exitosamente",
+      data: user,
+    });
+  } catch (error) {
+    console.error("Error actualizando estado de video:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
+  }
+});
+
 module.exports = router;
+
+// Generar un token único para un usuario (si no tiene uno)
+router.post("/email/:email/generate-token", async (req, res) => {
+  try {
+    const email = req.params.email.toLowerCase();
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
+    }
+
+    if (!user.token) {
+      user.token = require("crypto").randomBytes(20).toString("hex");
+      await user.save();
+    }
+
+    res.json({
+      success: true,
+      message: "Token generado/existente para el usuario",
+      token: user.token,
+    });
+  } catch (error) {
+    console.error("Error generando token para usuario:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
+  }
+});
+
+// Obtener un usuario por token
+router.get("/token/:token", async (req, res) => {
+  try {
+    const user = await User.findOne({ token: req.params.token });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
+    }
+    res.json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    console.error("Error obteniendo usuario por token:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
+  }
+});
+
+// Actualizar photoUrl de un usuario por token
+router.put("/token/:token/photo", async (req, res) => {
+  try {
+    const { photoUrl } = req.body;
+    const user = await User.findOneAndUpdate(
+      { token: req.params.token },
+      { photoUrl: photoUrl },
+      { new: true }
+    );
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
+    }
+    res.json({
+      success: true,
+      message: "Photo URL actualizada exitosamente por token",
+      data: user,
+    });
+  } catch (error) {
+    console.error("Error actualizando photo URL por token:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
+  }
+});
+
+// Actualizar videoWatched de un usuario por token
+router.put("/token/:token/video", async (req, res) => {
+  try {
+    const { videoWatched } = req.body;
+    const user = await User.findOneAndUpdate(
+      { token: req.params.token },
+      { videoWatched: videoWatched },
+      { new: true }
+    );
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Usuario no encontrado",
+      });
+    }
+    res.json({
+      success: true,
+      message: "Estado de video actualizado exitosamente por token",
+      data: user,
+    });
+  } catch (error) {
+    console.error("Error actualizando estado de video por token:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
+  }
+});
+
+// Obtener todos los usuarios con sus tokens (para la página de generación de enlaces)
+router.get("/with-tokens", async (req, res) => {
+  try {
+    const users = await User.find({}, "nombre apellido email videoWatched photoUrl token createdAt");
+    res.json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    console.error("Error obteniendo usuarios con tokens:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
+  }
+});
 
